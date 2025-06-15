@@ -1,0 +1,66 @@
+name: Check caddy-l4 updates
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest caddy-l4 commit
+        id: latest-commit
+        run: |
+          latest_commit=$(curl -s https://api.github.com/repos/mholt/caddy-l4/commits/master | jq -r '.sha')
+          echo "commit_hash=$latest_commit" >> $GITHUB_OUTPUT
+          echo "Latest caddy-l4 commit: $latest_commit"
+
+      - name: Read current commit hash
+        id: current-commit
+        run: |
+          current_commit=$(cat latest.txt)
+          echo "commit_hash=$current_commit" >> $GITHUB_OUTPUT
+          echo "Current stored commit: $current_commit"
+
+      - name: Check if update needed
+        id: check-update
+        run: |
+          if [ "${{ steps.latest-commit.outputs.commit_hash }}" != "${{ steps.current-commit.outputs.commit_hash }}" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "Update needed: new commit found"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "No update needed: commits match"
+          fi
+
+      - name: Update latest.txt
+        if: steps.check-update.outputs.update_needed == 'true'
+        run: |
+          echo "${{ steps.latest-commit.outputs.commit_hash }}" > latest.txt
+
+      - name: Create Pull Request
+        if: steps.check-update.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update caddy-l4 to commit ${{ steps.latest-commit.outputs.commit_hash }}"
+          title: "Update caddy-l4 to latest commit"
+          body: |
+            This PR updates the caddy-l4 reference to the latest commit.
+            
+            **Previous commit:** `${{ steps.current-commit.outputs.commit_hash }}`
+            **New commit:** `${{ steps.latest-commit.outputs.commit_hash }}`
+            
+            **Changes:** https://github.com/mholt/caddy-l4/compare/${{ steps.current-commit.outputs.commit_hash }}...${{ steps.latest-commit.outputs.commit_hash }}
+            
+            This PR was automatically created by GitHub Actions.
+          branch: update-caddy-l4-${{ steps.latest-commit.outputs.commit_hash }}
+          delete-branch: true
