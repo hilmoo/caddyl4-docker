@@ -2,7 +2,7 @@ name: Check caddy-l4 updates
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -19,9 +19,16 @@ jobs:
       - name: Get latest caddy-l4 commit
         id: latest-commit
         run: |
-          latest_commit=$(curl -s https://api.github.com/repos/mholt/caddy-l4/commits/master | jq -r '.sha')
-          echo "commit_hash=$latest_commit" >> $GITHUB_OUTPUT
+          response=$(curl -s https://api.github.com/repos/mholt/caddy-l4/commits/master)
+          latest_commit=$(echo "$response" | jq -r '.sha')
+
+          if [ -z "$latest_commit" ] || [ "$latest_commit" = "null" ]; then
+            echo "$response"
+            exit 1
+          fi
+
           echo "Latest caddy-l4 commit: $latest_commit"
+          echo "commit_hash=$latest_commit" >> $GITHUB_OUTPUT
 
       - name: Read current commit hash
         id: current-commit
@@ -55,12 +62,12 @@ jobs:
           title: "Update caddy-l4 to latest commit"
           body: |
             This PR updates the caddy-l4 reference to the latest commit.
-            
+
             **Previous commit:** `${{ steps.current-commit.outputs.commit_hash }}`
             **New commit:** `${{ steps.latest-commit.outputs.commit_hash }}`
-            
+
             **Changes:** https://github.com/mholt/caddy-l4/compare/${{ steps.current-commit.outputs.commit_hash }}...${{ steps.latest-commit.outputs.commit_hash }}
-            
+
             This PR was automatically created by GitHub Actions.
           branch: update-caddy-l4-${{ steps.latest-commit.outputs.commit_hash }}
           delete-branch: true
